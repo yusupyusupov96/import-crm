@@ -41,6 +41,16 @@ async function deleteClientRemote(id) {
   if (error) throw error;
 }
 
+async function fetchSubscriptionRemote(userId) {
+  const { data, error } = await supabase
+    .from("subscriptions")
+    .select("*")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
 async function fetchOrdersRemote() {
   const { data, error } = await supabase.from("orders").select("*").order("created_at", { ascending: false });
   if (error) throw error;
@@ -285,7 +295,7 @@ function AuthScreen() {
   );
 }
 
-function Nav({ tab, setTab, clientsCount, userEmail }) {
+function Nav({ tab, setTab, clientsCount, userEmail, isPro }) {
   const [showPrice, setShowPrice] = useState(false);
   const items = [
     { id: "dashboard", label: "Дашборд", icon: LayoutGrid },
@@ -322,19 +332,31 @@ function Nav({ tab, setTab, clientsCount, userEmail }) {
         })}
       </nav>
       <div className="px-4 py-4" style={{ borderTop: "1px solid #2C2C2C" }}>
-        <div>
-          <div style={{ color: NAV_MUTED, fontSize: 12.5, fontWeight: 700, ...mono }}>ТАРИФ FREE</div>
-          <div style={{ color: "#8A9099", fontSize: 11.5, fontWeight: 600, marginTop: 1 }}>до {FREE_LIMIT} клиентов</div>
-        </div>
-        <div className="flex items-center justify-between mt-2">
-          <span style={{ color: "#E5E5E5", fontSize: 13.5, fontWeight: 600 }}>Использовано</span>
-          <span style={{ color: WHITE, fontSize: 13.5, fontWeight: 700, ...mono }}>{used}/{FREE_LIMIT}</span>
-        </div>
-        <div className="w-full h-1.5 rounded mt-1.5" style={{ background: "#3A3A3A" }}>
-          <div className="h-1.5 rounded" style={{ width: `${pct}%`, background: pct >= 100 ? RED : "#5A8DEE" }} />
-        </div>
+        {isPro ? (
+          <div className="p-2.5 rounded flex items-center justify-between" style={{ background: "rgba(74,222,128,0.12)", border: "1px solid rgba(74,222,128,0.35)" }}>
+            <div>
+              <div style={{ color: "#4ADE80", fontSize: 13, fontWeight: 800, ...mono }}>ТАРИФ PRO</div>
+              <div style={{ color: "#8A9099", fontSize: 11.5, fontWeight: 600, marginTop: 1 }}>Безлимит клиентов</div>
+            </div>
+            <span style={{ fontSize: 18 }}>⭐</span>
+          </div>
+        ) : (
+          <>
+            <div>
+              <div style={{ color: NAV_MUTED, fontSize: 12.5, fontWeight: 700, ...mono }}>ТАРИФ FREE</div>
+              <div style={{ color: "#8A9099", fontSize: 11.5, fontWeight: 600, marginTop: 1 }}>до {FREE_LIMIT} клиентов</div>
+            </div>
+            <div className="flex items-center justify-between mt-2">
+              <span style={{ color: "#E5E5E5", fontSize: 13.5, fontWeight: 600 }}>Использовано</span>
+              <span style={{ color: WHITE, fontSize: 13.5, fontWeight: 700, ...mono }}>{used}/{FREE_LIMIT}</span>
+            </div>
+            <div className="w-full h-1.5 rounded mt-1.5" style={{ background: "#3A3A3A" }}>
+              <div className="h-1.5 rounded" style={{ width: `${pct}%`, background: pct >= 100 ? RED : "#5A8DEE" }} />
+            </div>
+          </>
+        )}
 
-        {!showPrice ? (
+        {!isPro && (!showPrice ? (
           <button
             onClick={() => setShowPrice(true)}
             className="w-full mt-2.5 py-2 rounded text-sm font-bold flex items-center justify-center gap-1.5"
@@ -352,7 +374,7 @@ function Nav({ tab, setTab, clientsCount, userEmail }) {
               Оформить подписку
             </button>
           </div>
-        )}
+        ))}
 
         <div className="mt-3 pt-3 flex items-center justify-between" style={{ borderTop: "1px solid #2C2C2C" }}>
           <span style={{ color: NAV_MUTED, fontSize: 12, fontWeight: 600 }} className="truncate">{userEmail}</span>
@@ -819,12 +841,12 @@ function ClientDetail({ client, orders, onClose, onSave, onDelete, onSaveOrderPa
   );
 }
 
-function Clients({ clients, orders, userId, onDataChanged }) {
+function Clients({ clients, orders, userId, onDataChanged, isPro }) {
   const [showForm, setShowForm] = useState(false);
   const [name, setName] = useState("");
   const [selected, setSelected] = useState(null);
   const [busy, setBusy] = useState(false);
-  const atLimit = clients.length >= FREE_LIMIT;
+  const atLimit = !isPro && clients.length >= FREE_LIMIT;
 
   const addClient = async () => {
     if (!name.trim() || atLimit) return;
@@ -874,7 +896,9 @@ function Clients({ clients, orders, userId, onDataChanged }) {
       <div className="flex items-center justify-between">
         <div>
           <h1 style={{ ...display, fontSize: 25, fontWeight: 800, color: BLACK }}>Клиенты</h1>
-          <p style={{ color: MUTED, fontSize: 15.5, marginTop: 2, fontWeight: 500 }}>{clients.length} из {FREE_LIMIT} доступно на Free</p>
+          <p style={{ color: MUTED, fontSize: 15.5, marginTop: 2, fontWeight: 500 }}>
+            {isPro ? `${clients.length} клиентов · PRO без лимита` : `${clients.length} из ${FREE_LIMIT} доступно на Free`}
+          </p>
         </div>
         <div className="flex items-center gap-2">
           <button onClick={() => exportToExcel(clients, orders, "клиенты_и_заказы.xlsx")} className="flex items-center gap-1.5 px-3 py-2 rounded text-sm font-bold" style={{ background: WHITE, color: BLACK, border: "1px solid #CCC" }}>
@@ -1256,6 +1280,7 @@ export default function App() {
   const [invoices, setInvoices] = useState([]);
   const [loadingData, setLoadingData] = useState(false);
   const [loadError, setLoadError] = useState("");
+  const [isPro, setIsPro] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session));
@@ -1275,6 +1300,10 @@ export default function App() {
       const uiOrders = rawOrders.map((o) => dbOrderToUi(o, uiClients));
       setClients(uiClients);
       setOrders(uiOrders);
+      if (session?.user?.id) {
+        const sub = await fetchSubscriptionRemote(session.user.id);
+        setIsPro(sub?.plan === "pro" && sub?.status === "active");
+      }
     } catch (e) {
       setLoadError(e.message || "Не удалось загрузить данные");
     } finally {
@@ -1298,7 +1327,7 @@ export default function App() {
 
   return (
     <div className="flex min-h-screen" style={{ background: GRAY, ...display }}>
-      <Nav tab={tab} setTab={setTab} clientsCount={clients.length} userEmail={session.user?.email} />
+      <Nav tab={tab} setTab={setTab} clientsCount={clients.length} userEmail={session.user?.email} isPro={isPro} />
       <div className="flex-1 p-7 overflow-auto">
         {loadingData && (
           <div className="flex items-center gap-2 mb-4" style={{ color: MUTED, fontSize: 14, fontWeight: 600 }}>
@@ -1309,7 +1338,7 @@ export default function App() {
           <div className="mb-4 px-3 py-2 rounded text-sm font-semibold" style={{ background: "#FCEBEC", color: RED }}>{loadError}</div>
         )}
         {tab === "dashboard" && <Dashboard clients={clients} orders={orders} />}
-        {tab === "clients" && <Clients clients={clients} orders={orders} userId={session.user.id} onDataChanged={loadData} />}
+        {tab === "clients" && <Clients clients={clients} orders={orders} userId={session.user.id} onDataChanged={loadData} isPro={isPro} />}
         {tab === "orders" && <Orders orders={orders} clients={clients} />}
         {tab === "calc" && <CostCalculator />}
         {tab === "invoices" && <InvoiceBuilder invoices={invoices} setInvoices={setInvoices} />}
