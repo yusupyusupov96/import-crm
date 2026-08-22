@@ -93,6 +93,12 @@ function fmtDate(iso) {
   return `${d}.${m}.${y}`;
 }
 
+function statusColor(status) {
+  if (status === "доставлен") return { bg: "#E9F6EE", fg: "#1D8A4E" };
+  if (status === "на складе") return { bg: "#FFF4DC", fg: "#9A6B00" };
+  return { bg: "#FCEBEC", fg: RED }; // "в пути" и по умолчанию
+}
+
 function deliveryCountdown(order) {
   if (!order.estimatedDays || order.status === "доставлен" || !order.dateIso) return null;
   const orderDate = new Date(order.dateIso + "T00:00:00");
@@ -109,7 +115,7 @@ function exportToExcel(clients, orders, filename) {
   const wb = XLSX.utils.book_new();
   const clientsSheet = XLSX.utils.json_to_sheet(clients.map((c) => ({ Клиент: c.name, Статус: c.tag })));
   const ordersSheet = XLSX.utils.json_to_sheet(
-    orders.map((o) => ({ Заказ: o.number, Клиент: o.client, Товар: o.item, Цена: o.price, Дата: o.date, Статус: o.status }))
+    orders.map((o) => ({ Клиент: o.client, Товар: o.item, Цена: o.price, Дата: o.date, Статус: o.status }))
   );
   XLSX.utils.book_append_sheet(wb, clientsSheet, "Клиенты");
   XLSX.utils.book_append_sheet(wb, ordersSheet, "Заказы");
@@ -433,13 +439,13 @@ function Dashboard({ clients, orders }) {
         {orders.map((o) => (
           <div key={o.id} className="flex items-center justify-between py-2.5" style={{ borderTop: "1px solid #EEE" }}>
             <div>
-              <div style={{ fontSize: 15, fontWeight: 700, color: BLACK, ...mono }}>{o.number}</div>
-              <div style={{ fontSize: 14.5, color: MUTED, fontWeight: 500 }}>{o.item} — {o.client}</div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: BLACK }}>{o.client}</div>
+              <div style={{ fontSize: 14.5, color: MUTED, fontWeight: 500 }}>{o.item}</div>
             </div>
             <div className="text-right">
               <div
                 className="px-2 py-0.5 rounded text-xs font-bold inline-block"
-                style={{ background: o.status === "доставлен" ? "#E9F6EE" : "#FCEBEC", color: o.status === "доставлен" ? "#1D8A4E" : RED }}
+                style={{ background: statusColor(o.status).bg, color: statusColor(o.status).fg }}
               >
                 {o.status}
               </div>
@@ -460,7 +466,7 @@ function OrderCard({ order, onSavePayment }) {
   const [paid, setPaid] = useState(order.paidAmount ?? order.price);
   const [route, setRoute] = useState(order.route || "Авто (Гуанчжоу — Москва)");
   const [estimatedDays, setEstimatedDays] = useState(order.estimatedDays || "");
-  const [orderNumber, setOrderNumber] = useState(order.number || "");
+  const [deliveryStatus, setDeliveryStatus] = useState(order.status || "в пути");
 
   const due = status === "Частично" ? Math.max(0, order.price - Number(paid || 0)) : 0;
   const countdown = deliveryCountdown(order);
@@ -469,7 +475,7 @@ function OrderCard({ order, onSavePayment }) {
     setSaving(true);
     try {
       await onSavePayment(order.id, {
-        order_number: orderNumber.trim() || order.number,
+        status: deliveryStatus,
         payment_method: method,
         currency,
         payment_status: status,
@@ -486,15 +492,14 @@ function OrderCard({ order, onSavePayment }) {
   return (
     <div className="p-3 rounded" style={{ border: "1px solid #E0E0E0" }}>
       <div className="flex items-center justify-between">
-        <span style={{ fontSize: 14.5, fontWeight: 700, color: BLACK, ...mono }}>{order.number}</span>
+        <span style={{ fontSize: 15, color: BLACK, fontWeight: 700 }}>{order.item}</span>
         <span
           className="px-2 py-0.5 rounded text-xs font-bold"
-          style={{ background: order.status === "доставлен" ? "#E9F6EE" : "#FCEBEC", color: order.status === "доставлен" ? "#1D8A4E" : RED }}
+          style={{ background: statusColor(order.status).bg, color: statusColor(order.status).fg }}
         >
           {order.status}
         </span>
       </div>
-      <div style={{ fontSize: 15, color: BLACK, marginTop: 4, fontWeight: 500 }}>{order.item}</div>
       <div className="flex items-center justify-between mt-1.5">
         <span style={{ fontSize: 13.5, color: MUTED, fontWeight: 600, ...mono }}>{order.date}</span>
         <span style={{ fontSize: 15.5, fontWeight: 700, color: BLACK, ...mono }}>{order.price.toLocaleString("ru-RU")} ₽</span>
@@ -533,8 +538,12 @@ function OrderCard({ order, onSavePayment }) {
         ) : (
           <div className="space-y-2.5">
             <div>
-              <label style={{ fontSize: 12, fontWeight: 700, color: INK, display: "block", marginBottom: 3 }}>Номер заказа</label>
-              <input value={orderNumber} onChange={(e) => setOrderNumber(e.target.value)} className="w-full px-2.5 py-2 rounded text-sm outline-none" style={{ border: "1px solid #BBB", color: BLACK, fontWeight: 800, ...mono, background: WHITE }} />
+              <label style={{ fontSize: 12, fontWeight: 700, color: INK, display: "block", marginBottom: 3 }}>Статус доставки</label>
+              <select value={deliveryStatus} onChange={(e) => setDeliveryStatus(e.target.value)} className="w-full px-2.5 py-2 rounded text-sm font-bold outline-none" style={{ border: "1px solid #BBB", color: BLACK, background: WHITE }}>
+                <option value="на складе">на складе</option>
+                <option value="в пути">в пути</option>
+                <option value="доставлен">доставлен</option>
+              </select>
             </div>
             <div>
               <label style={{ fontSize: 12, fontWeight: 700, color: INK, display: "block", marginBottom: 3 }}>Маршрут доставки</label>
@@ -633,7 +642,6 @@ function ClientDetail({ client, orders, onClose, onSave, onDelete, onSaveOrderPa
   const [newPaid, setNewPaid] = useState("");
   const [newRoute, setNewRoute] = useState("Авто (Гуанчжоу — Москва)");
   const [newEstDays, setNewEstDays] = useState("");
-  const [newOrderNumber, setNewOrderNumber] = useState(nextOrderNumber);
 
   const save = async () => {
     if (!name.trim()) return;
@@ -655,7 +663,7 @@ function ClientDetail({ client, orders, onClose, onSave, onDelete, onSaveOrderPa
     setBusy(true);
     try {
       await onAddOrder(client.id, {
-        order_number: (newOrderNumber || nextOrderNumber).trim(),
+        order_number: nextOrderNumber,
         item: newItem.trim(),
         price: priceNum,
         status: newStatus,
@@ -668,7 +676,7 @@ function ClientDetail({ client, orders, onClose, onSave, onDelete, onSaveOrderPa
       });
       setNewItem(""); setNewPrice(""); setNewStatus("в пути");
       setNewMethod("Перевод"); setNewCurrency("₽"); setNewPayStatus("Полностью"); setNewPaid("");
-      setNewRoute("Авто (Гуанчжоу — Москва)"); setNewEstDays(""); setNewOrderNumber(nextOrderNumber);
+      setNewRoute("Авто (Гуанчжоу — Москва)"); setNewEstDays("");
       setShowOrderForm(false);
     } finally {
       setBusy(false);
@@ -747,10 +755,6 @@ function ClientDetail({ client, orders, onClose, onSave, onDelete, onSaveOrderPa
         {showOrderForm && (
           <div className="p-3.5 rounded mb-2 space-y-3" style={{ background: GRAY }}>
             <div>
-              <label style={{ fontSize: 13, fontWeight: 700, color: INK, display: "block", marginBottom: 4 }}>Номер заказа</label>
-              <input value={newOrderNumber} onChange={(e) => setNewOrderNumber(e.target.value)} placeholder={nextOrderNumber} className="w-full px-3 py-2.5 rounded text-base outline-none" style={{ border: "1px solid #BBB", color: BLACK, fontWeight: 800, ...mono, background: WHITE }} />
-            </div>
-            <div>
               <label style={{ fontSize: 13, fontWeight: 700, color: INK, display: "block", marginBottom: 4 }}>Что заказал</label>
               <input autoFocus value={newItem} onChange={(e) => setNewItem(e.target.value)} placeholder="Например: Мотозапчасти, партия 20шт" className="w-full px-3 py-2.5 rounded text-base outline-none" style={{ border: "1px solid #BBB", color: BLACK, fontWeight: 600, background: WHITE }} />
             </div>
@@ -762,6 +766,7 @@ function ClientDetail({ client, orders, onClose, onSave, onDelete, onSaveOrderPa
               <div className="flex-1">
                 <label style={{ fontSize: 13, fontWeight: 700, color: INK, display: "block", marginBottom: 4 }}>Статус доставки</label>
                 <select value={newStatus} onChange={(e) => setNewStatus(e.target.value)} className="w-full px-3 py-2.5 rounded text-base font-bold outline-none" style={{ border: "1px solid #BBB", color: BLACK, background: WHITE }}>
+                  <option value="на складе">на складе</option>
                   <option value="в пути">в пути</option>
                   <option value="доставлен">доставлен</option>
                 </select>
@@ -1016,7 +1021,7 @@ function Orders({ orders, clients }) {
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded flex items-center justify-center" style={{ background: GRAY }}><Package size={16} color={BLACK} /></div>
                 <div>
-                  <div style={{ fontWeight: 700, fontSize: 15.5, color: BLACK }}>{o.number} <span style={{ color: MUTED, fontWeight: 600 }}>· {o.client}</span></div>
+                  <div style={{ fontWeight: 700, fontSize: 15.5, color: BLACK }}>{o.client}</div>
                   <div style={{ fontSize: 14.5, color: MUTED, fontWeight: 500 }}>{o.item}</div>
                   {o.route && <div style={{ fontSize: 12.5, color: MUTED, fontWeight: 600, marginTop: 2 }}>{o.route}</div>}
                   {o.paymentMethod && (
@@ -1031,7 +1036,7 @@ function Orders({ orders, clients }) {
               </div>
               <div className="text-right">
                 <div style={{ fontSize: 15.5, fontWeight: 700, color: BLACK, ...mono }}>{o.price.toLocaleString("ru-RU")} ₽</div>
-                <div className="px-2.5 py-0.5 rounded text-xs font-bold mt-1 inline-block" style={{ background: o.status === "доставлен" ? "#E9F6EE" : "#FCEBEC", color: o.status === "доставлен" ? "#1D8A4E" : RED }}>{o.status}</div>
+                <div className="px-2.5 py-0.5 rounded text-xs font-bold mt-1 inline-block" style={{ background: statusColor(o.status).bg, color: statusColor(o.status).fg }}>{o.status}</div>
                 {countdown && <div style={{ fontSize: 13, fontWeight: 800, color: countdown.overdue ? RED : "#1D8A4E", marginTop: 4 }}>{countdown.label}</div>}
               </div>
             </div>
