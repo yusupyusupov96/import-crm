@@ -28,8 +28,8 @@ async function fetchClientsRemote() {
   if (error) throw error;
   return data;
 }
-async function createClientRemote(userId, name) {
-  const { error } = await supabase.from("clients").insert({ user_id: userId, name, tag: "новый" });
+async function createClientRemote(userId, name, code) {
+  const { error } = await supabase.from("clients").insert({ user_id: userId, name, tag: "новый", code: code || null });
   if (error) throw error;
 }
 async function updateClientRemote(id, patch) {
@@ -460,6 +460,7 @@ function OrderCard({ order, onSavePayment }) {
   const [paid, setPaid] = useState(order.paidAmount ?? order.price);
   const [route, setRoute] = useState(order.route || "Авто (Гуанчжоу — Москва)");
   const [estimatedDays, setEstimatedDays] = useState(order.estimatedDays || "");
+  const [orderNumber, setOrderNumber] = useState(order.number || "");
 
   const due = status === "Частично" ? Math.max(0, order.price - Number(paid || 0)) : 0;
   const countdown = deliveryCountdown(order);
@@ -468,6 +469,7 @@ function OrderCard({ order, onSavePayment }) {
     setSaving(true);
     try {
       await onSavePayment(order.id, {
+        order_number: orderNumber.trim() || order.number,
         payment_method: method,
         currency,
         payment_status: status,
@@ -530,6 +532,10 @@ function OrderCard({ order, onSavePayment }) {
           </div>
         ) : (
           <div className="space-y-2.5">
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 700, color: INK, display: "block", marginBottom: 3 }}>Номер заказа</label>
+              <input value={orderNumber} onChange={(e) => setOrderNumber(e.target.value)} className="w-full px-2.5 py-2 rounded text-sm outline-none" style={{ border: "1px solid #BBB", color: BLACK, fontWeight: 800, ...mono, background: WHITE }} />
+            </div>
             <div>
               <label style={{ fontSize: 12, fontWeight: 700, color: INK, display: "block", marginBottom: 3 }}>Маршрут доставки</label>
               <select value={route} onChange={(e) => setRoute(e.target.value)} className="w-full px-2.5 py-2 rounded text-sm font-bold outline-none" style={{ border: "1px solid #BBB", color: BLACK, background: WHITE }}>
@@ -608,12 +614,13 @@ function OrderCard({ order, onSavePayment }) {
   );
 }
 
-function ClientDetail({ client, orders, onClose, onSave, onDelete, onSaveOrderPayment, onAddOrder }) {
+function ClientDetail({ client, orders, onClose, onSave, onDelete, onSaveOrderPayment, onAddOrder, nextOrderNumber }) {
   const clientOrders = orders.filter((o) => o.clientId === client.id);
   const total = clientOrders.reduce((s, o) => s + o.price, 0);
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(client.name);
   const [tag, setTag] = useState(client.tag);
+  const [code, setCode] = useState(client.code || "");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [busy, setBusy] = useState(false);
   const [showOrderForm, setShowOrderForm] = useState(false);
@@ -626,12 +633,13 @@ function ClientDetail({ client, orders, onClose, onSave, onDelete, onSaveOrderPa
   const [newPaid, setNewPaid] = useState("");
   const [newRoute, setNewRoute] = useState("Авто (Гуанчжоу — Москва)");
   const [newEstDays, setNewEstDays] = useState("");
+  const [newOrderNumber, setNewOrderNumber] = useState(nextOrderNumber);
 
   const save = async () => {
     if (!name.trim()) return;
     setBusy(true);
     try {
-      await onSave(client.id, { name: name.trim(), tag });
+      await onSave(client.id, { name: name.trim(), tag, code: code.trim() || null });
       setEditing(false);
     } finally {
       setBusy(false);
@@ -647,6 +655,7 @@ function ClientDetail({ client, orders, onClose, onSave, onDelete, onSaveOrderPa
     setBusy(true);
     try {
       await onAddOrder(client.id, {
+        order_number: (newOrderNumber || nextOrderNumber).trim(),
         item: newItem.trim(),
         price: priceNum,
         status: newStatus,
@@ -659,7 +668,7 @@ function ClientDetail({ client, orders, onClose, onSave, onDelete, onSaveOrderPa
       });
       setNewItem(""); setNewPrice(""); setNewStatus("в пути");
       setNewMethod("Перевод"); setNewCurrency("₽"); setNewPayStatus("Полностью"); setNewPaid("");
-      setNewRoute("Авто (Гуанчжоу — Москва)"); setNewEstDays("");
+      setNewRoute("Авто (Гуанчжоу — Москва)"); setNewEstDays(""); setNewOrderNumber(nextOrderNumber);
       setShowOrderForm(false);
     } finally {
       setBusy(false);
@@ -682,11 +691,19 @@ function ClientDetail({ client, orders, onClose, onSave, onDelete, onSaveOrderPa
           {!editing ? (
             <div>
               <div style={{ ...display, fontSize: 21, fontWeight: 800, color: BLACK }}>{client.name}</div>
-              <span className="inline-block mt-1.5 px-2 py-0.5 rounded text-xs font-bold" style={{ background: GRAY, color: BLACK }}>{client.tag}</span>
+              <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                <span className="px-2 py-0.5 rounded text-xs font-bold" style={{ background: GRAY, color: BLACK }}>{client.tag}</span>
+                {client.code && (
+                  <span className="px-2 py-0.5 rounded text-xs font-bold" style={{ background: "#EEF2FF", color: "#4338CA", ...mono }}>
+                    код: {client.code}
+                  </span>
+                )}
+              </div>
             </div>
           ) : (
             <div className="flex-1 pr-3 space-y-2">
-              <input value={name} onChange={(e) => setName(e.target.value)} className="w-full px-3 py-2 rounded text-base font-bold outline-none" style={{ border: "1px solid #CCC", color: BLACK }} />
+              <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Имя клиента" className="w-full px-3 py-2 rounded text-base font-bold outline-none" style={{ border: "1px solid #CCC", color: BLACK }} />
+              <input value={code} onChange={(e) => setCode(e.target.value)} placeholder="Код клиента (необязательно)" className="w-full px-3 py-2 rounded text-sm outline-none" style={{ border: "1px solid #CCC", color: BLACK, ...mono }} />
               <select value={tag} onChange={(e) => setTag(e.target.value)} className="px-2 py-1.5 rounded text-sm font-semibold outline-none" style={{ border: "1px solid #CCC", color: BLACK, background: WHITE }}>
                 <option value="новый">новый</option>
                 <option value="постоянный">постоянный</option>
@@ -729,6 +746,10 @@ function ClientDetail({ client, orders, onClose, onSave, onDelete, onSaveOrderPa
 
         {showOrderForm && (
           <div className="p-3.5 rounded mb-2 space-y-3" style={{ background: GRAY }}>
+            <div>
+              <label style={{ fontSize: 13, fontWeight: 700, color: INK, display: "block", marginBottom: 4 }}>Номер заказа</label>
+              <input value={newOrderNumber} onChange={(e) => setNewOrderNumber(e.target.value)} placeholder={nextOrderNumber} className="w-full px-3 py-2.5 rounded text-base outline-none" style={{ border: "1px solid #BBB", color: BLACK, fontWeight: 800, ...mono, background: WHITE }} />
+            </div>
             <div>
               <label style={{ fontSize: 13, fontWeight: 700, color: INK, display: "block", marginBottom: 4 }}>Что заказал</label>
               <input autoFocus value={newItem} onChange={(e) => setNewItem(e.target.value)} placeholder="Например: Мотозапчасти, партия 20шт" className="w-full px-3 py-2.5 rounded text-base outline-none" style={{ border: "1px solid #BBB", color: BLACK, fontWeight: 600, background: WHITE }} />
@@ -844,6 +865,7 @@ function ClientDetail({ client, orders, onClose, onSave, onDelete, onSaveOrderPa
 function Clients({ clients, orders, userId, onDataChanged, isPro }) {
   const [showForm, setShowForm] = useState(false);
   const [name, setName] = useState("");
+  const [newClientCode, setNewClientCode] = useState("");
   const [selected, setSelected] = useState(null);
   const [busy, setBusy] = useState(false);
   const atLimit = !isPro && clients.length >= FREE_LIMIT;
@@ -852,9 +874,9 @@ function Clients({ clients, orders, userId, onDataChanged, isPro }) {
     if (!name.trim() || atLimit) return;
     setBusy(true);
     try {
-      await createClientRemote(userId, name.trim());
+      await createClientRemote(userId, name.trim(), newClientCode.trim());
       await onDataChanged();
-      setName("");
+      setName(""); setNewClientCode("");
       setShowForm(false);
     } finally {
       setBusy(false);
@@ -890,6 +912,7 @@ function Clients({ clients, orders, userId, onDataChanged, isPro }) {
   };
 
   const selectedClient = selected ? clients.find((c) => c.id === selected.id) || selected : null;
+  const nextOrderNumber = `З-${String(1000 + orders.length + 1).slice(-4)}`;
 
   return (
     <div>
@@ -919,6 +942,7 @@ function Clients({ clients, orders, userId, onDataChanged, isPro }) {
       {showForm && (
         <div className="mt-4 p-4 rounded flex items-center gap-2" style={{ background: WHITE, border: "1px solid #E0E0E0" }}>
           <input autoFocus value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addClient()} placeholder="Имя клиента" className="flex-1 px-2.5 py-2 rounded text-sm outline-none" style={{ border: "1px solid #CCC" }} />
+          <input value={newClientCode} onChange={(e) => setNewClientCode(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addClient()} placeholder="Код (необязательно)" className="w-40 px-2.5 py-2 rounded text-sm outline-none" style={{ border: "1px solid #CCC", ...mono }} />
           <button onClick={addClient} disabled={busy} className="px-3 py-2 rounded text-sm font-bold" style={{ background: BLACK, color: WHITE }}>Сохранить</button>
           <button onClick={() => setShowForm(false)} className="p-2 rounded" style={{ color: MUTED }}><X size={16} /></button>
         </div>
@@ -938,7 +962,10 @@ function Clients({ clients, orders, userId, onDataChanged, isPro }) {
           const coTotal = co.reduce((s, o) => s + o.price, 0);
           return (
             <button key={c.id} onClick={() => setSelected(c)} className="w-full grid grid-cols-5 px-4 py-3 items-center text-left" style={{ background: WHITE, borderTop: "1px solid #EEE" }}>
-              <div style={{ fontWeight: 700, fontSize: 15.5, color: BLACK }}>{c.name}</div>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 15.5, color: BLACK }}>{c.name}</div>
+                {c.code && <div style={{ fontSize: 12, color: MUTED, fontWeight: 600, ...mono }}>код: {c.code}</div>}
+              </div>
               <div style={{ fontSize: 15, fontWeight: 600, color: INK, ...mono }}>{co.length}</div>
               <div style={{ fontSize: 15, fontWeight: 600, color: INK, ...mono }}>{coTotal.toLocaleString("ru-RU")} ₽</div>
               <div><span className="px-2 py-0.5 rounded text-xs font-bold" style={{ background: GRAY, color: BLACK }}>{c.tag}</span></div>
@@ -957,6 +984,7 @@ function Clients({ clients, orders, userId, onDataChanged, isPro }) {
           onDelete={deleteClient}
           onSaveOrderPayment={saveOrderPayment}
           onAddOrder={addOrder}
+          nextOrderNumber={nextOrderNumber}
         />
       )}
     </div>
@@ -1296,7 +1324,7 @@ export default function App() {
     try {
       const rawClients = await fetchClientsRemote();
       const rawOrders = await fetchOrdersRemote();
-      const uiClients = rawClients.map((c) => ({ id: c.id, name: c.name, tag: c.tag }));
+      const uiClients = rawClients.map((c) => ({ id: c.id, name: c.name, tag: c.tag, code: c.code }));
       const uiOrders = rawOrders.map((o) => dbOrderToUi(o, uiClients));
       setClients(uiClients);
       setOrders(uiOrders);
