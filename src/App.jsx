@@ -333,6 +333,80 @@ function printInvoicePDF(invoice) {
 // ============================================================
 // AUTH SCREEN
 // ============================================================
+function PrivacyPolicy() {
+  const Section = ({ title, children }) => (
+    <div className="mb-6">
+      <h2 style={{ ...display, fontSize: 17, fontWeight: 800, color: BLACK, marginBottom: 8 }}>{title}</h2>
+      <div style={{ color: INK, fontSize: 14.5, lineHeight: 1.65, fontWeight: 500 }}>{children}</div>
+    </div>
+  );
+  return (
+    <div className="min-h-screen" style={{ background: GRAY, ...display }}>
+      <div className="max-w-2xl mx-auto px-5 py-10">
+        <a href="/" style={{ ...display, color: BLACK, fontWeight: 800, fontSize: 18, letterSpacing: "0.02em", textDecoration: "none" }}>
+          ИМПОРТ<span style={{ color: RED }}>·</span>CRM
+        </a>
+        <h1 style={{ ...display, fontSize: 26, fontWeight: 800, color: BLACK, marginTop: 18, marginBottom: 4 }}>Политика конфиденциальности</h1>
+        <p style={{ color: MUTED, fontSize: 13.5, marginBottom: 28, fontWeight: 600 }}>Действует с 24 августа 2026 года</p>
+
+        <div className="p-6 rounded" style={{ background: WHITE, border: "1px solid #E0E0E0" }}>
+          <Section title="1. Общие положения">
+            Настоящая политика описывает, как сервис ИМПОРТ·CRM (далее — «Сервис», доступен по адресу cncrm.ru) собирает,
+            использует и защищает данные пользователей. Используя Сервис, вы соглашаетесь с условиями, описанными ниже.
+          </Section>
+
+          <Section title="2. Какие данные мы собираем">
+            <ul className="list-disc pl-5 space-y-1">
+              <li>Данные аккаунта: email и пароль (пароль хранится в зашифрованном виде, мы не видим его в открытом тексте)</li>
+              <li>Данные, которые вы вносите в Сервис: клиенты, их коды и теги, заказы, накладные, расчёты калькулятора</li>
+              <li>Технические данные: дата регистрации, статус подписки (Free/PRO)</li>
+            </ul>
+          </Section>
+
+          <Section title="3. Как мы используем данные">
+            Данные используются исключительно для работы функций Сервиса: отображения вашего дашборда, списка клиентов,
+            заказов, расчётов и накладных. Мы не используем ваши данные в рекламных целях и не продаём их третьим лицам.
+          </Section>
+
+          <Section title="4. Где хранятся данные">
+            Данные хранятся на инфраструктуре Supabase с шифрованием соединения (SSL/TLS). На уровне базы данных включена
+            технология Row Level Security (RLS) — это означает, что даже на техническом уровне один пользователь не может
+            получить доступ к данным другого пользователя через приложение: доступ к каждой записи ограничен её владельцем.
+          </Section>
+
+          <Section title="5. Технический доступ администрации">
+            Как у владельца Сервиса, у администрации сохраняется технический доступ к базе данных (например, для оказания
+            технической поддержки или исправления ошибок). Этот доступ используется только в служебных целях и не
+            используется для просмотра, копирования или передачи данных пользователей третьим лицам.
+          </Section>
+
+          <Section title="6. Платежи">
+            Оплата подписки PRO обрабатывается через сертифицированного платёжного провайдера (ЮKassa). Данные банковских
+            карт не передаются и не хранятся на серверах Сервиса — их обработка происходит непосредственно на стороне
+            платёжного провайдера в соответствии со стандартом безопасности PCI DSS.
+          </Section>
+
+          <Section title="7. Права пользователя">
+            Вы можете в любой момент запросить удаление своего аккаунта и всех связанных данных, написав администрации
+            Сервиса. Запрос обрабатывается в разумный срок.
+          </Section>
+
+          <Section title="8. Изменения политики">
+            Мы можем обновлять данную политику по мере развития Сервиса. Актуальная версия всегда доступна по этой ссылке.
+          </Section>
+
+          <Section title="9. Контакты">
+            По всем вопросам, связанным с обработкой данных, вы можете связаться с администрацией Сервиса через контакты,
+            указанные на сайте cncrm.ru.
+          </Section>
+        </div>
+
+        <a href="/" style={{ display: "block", textAlign: "center", marginTop: 20, color: MUTED, fontSize: 14, fontWeight: 600 }}>← Вернуться на сайт</a>
+      </div>
+    </div>
+  );
+}
+
 function AuthScreen() {
   const [mode, setMode] = useState("signin");
   const [email, setEmail] = useState("");
@@ -423,6 +497,8 @@ function AuthScreen() {
           >
             {mode === "signin" ? "Нет аккаунта? Зарегистрироваться" : "Уже есть аккаунт? Войти"}
           </button>
+
+          <a href="/privacy" className="block text-center text-xs font-semibold mt-1" style={{ color: NAV_MUTED }}>Политика конфиденциальности</a>
         </div>
       </div>
     </div>
@@ -522,6 +598,7 @@ function Nav({ tab, setTab, clientsCount, userEmail, isPro, mobileOpen, setMobil
             <LogOut size={15} />
           </button>
         </div>
+        <a href="/privacy" target="_blank" rel="noopener noreferrer" className="block text-center mt-2" style={{ color: "#6E7480", fontSize: 11, fontWeight: 600 }}>Политика конфиденциальности</a>
       </div>
     </div>
   );
@@ -1656,6 +1733,10 @@ function InvoiceBuilder({ invoices, userId, onDataChanged }) {
 }
 
 export default function App() {
+  if (typeof window !== "undefined" && window.location.pathname === "/privacy") {
+    return <PrivacyPolicy />;
+  }
+
   const [session, setSession] = useState(undefined); // undefined = ещё не проверили, null = не залогинен
   const [tab, setTab] = useState("dashboard");
   const [clients, setClients] = useState([]);
