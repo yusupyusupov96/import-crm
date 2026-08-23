@@ -113,6 +113,10 @@ async function deleteCalculationRemote(id) {
   const { error } = await supabase.from("calculations").delete().eq("id", id);
   if (error) throw error;
 }
+async function updateCalculationRemote(id, patch) {
+  const { error } = await supabase.from("calculations").update(patch).eq("id", id);
+  if (error) throw error;
+}
 function dbCalcToUi(row) {
   return {
     id: row.id,
@@ -1255,6 +1259,7 @@ function CostCalculator({ calculations, userId, onDataChanged }) {
   const [calcNumber, setCalcNumber] = useState("");
   const [saving, setSaving] = useState(false);
   const [expanded, setExpanded] = useState(null);
+  const [editingId, setEditingId] = useState(null);
 
   const n = (v) => (v === "" || v === null || v === undefined || isNaN(v) ? 0 : Number(v));
 
@@ -1277,8 +1282,7 @@ function CostCalculator({ calculations, userId, onDataChanged }) {
     if (saving) return;
     setSaving(true);
     try {
-      await createCalculationRemote({
-        user_id: userId,
+      const payload = {
         number: calcNumber.trim() || `Р-${String(calculations.length + 1).padStart(4, "0")}`,
         client_name: clientName.trim() || null,
         price: n(price),
@@ -1293,15 +1297,44 @@ function CostCalculator({ calculations, userId, onDataChanged }) {
         cost_total: calc.costTotal,
         sell_price: calc.sellPrice,
         profit: calc.profit,
-      });
+      };
+      if (editingId) {
+        await updateCalculationRemote(editingId, payload);
+      } else {
+        await createCalculationRemote({ ...payload, user_id: userId });
+      }
       await onDataChanged();
       setClientName("");
       setCalcNumber("");
+      setEditingId(null);
     } catch (e) {
       alert("Не удалось сохранить расчёт: " + (e.message || "ошибка"));
     } finally {
       setSaving(false);
     }
+  };
+
+  const startEditCalc = (c) => {
+    setEditingId(c.id);
+    setCalcNumber(c.number || "");
+    setClientName(c.clientName || "");
+    setPrice(c.price ?? "");
+    setChinaDelivery(c.chinaDelivery ?? "");
+    setRate(c.rate ?? "");
+    setWeight(c.weight ?? "");
+    setShipRateUsd(c.shipRateUsd ?? "");
+    setUsdRate(c.usdRate ?? "");
+    setBuyerFee(c.buyerFee ?? "");
+    setOther(c.other ?? "");
+    setMarginRub(c.marginRub ?? "");
+    setExpanded(null);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const cancelEditCalc = () => {
+    setEditingId(null);
+    setClientName("");
+    setCalcNumber("");
   };
 
   const deleteCalculation = async (id) => {
@@ -1377,14 +1410,17 @@ function CostCalculator({ calculations, userId, onDataChanged }) {
       </div>
 
       <div className="mt-5 p-4 rounded" style={{ background: WHITE, border: "1px solid #E0E0E0" }}>
-        <div style={{ fontWeight: 700, fontSize: 15, color: BLACK, marginBottom: 10 }}>Сохранить этот расчёт</div>
+        <div style={{ fontWeight: 700, fontSize: 15, color: BLACK, marginBottom: 10 }}>{editingId ? "Изменить сохранённый расчёт" : "Сохранить этот расчёт"}</div>
         <div className="flex flex-col sm:flex-row gap-3">
           <input value={clientName} onChange={(e) => setClientName(e.target.value)} placeholder="Имя клиента (необязательно)" className="flex-1 px-3 py-2.5 rounded text-sm outline-none" style={{ border: "1px solid #CCC", color: BLACK, fontWeight: 500 }} />
           <input value={calcNumber} onChange={(e) => setCalcNumber(e.target.value)} placeholder="Номер (необязательно)" className="sm:w-48 px-3 py-2.5 rounded text-sm outline-none" style={{ border: "1px solid #CCC", color: BLACK, fontWeight: 500 }} />
           <button onClick={saveCalculation} disabled={saving} className="px-5 py-2.5 rounded text-sm font-bold flex items-center justify-center gap-2" style={{ background: RED, color: WHITE, opacity: saving ? 0.7 : 1 }}>
             {saving && <Loader2 size={14} className="animate-spin" />}
-            {saving ? "Сохраняем..." : "Сохранить расчёт"}
+            {saving ? "Сохраняем..." : editingId ? "Сохранить изменения" : "Сохранить расчёт"}
           </button>
+          {editingId && (
+            <button onClick={cancelEditCalc} className="px-5 py-2.5 rounded text-sm font-bold" style={{ background: GRAY, color: BLACK }}>Отмена</button>
+          )}
         </div>
       </div>
 
@@ -1410,6 +1446,7 @@ function CostCalculator({ calculations, userId, onDataChanged }) {
                       <div className="flex items-center gap-2">
                         <button onClick={() => exportCalcToExcel(c)} className="flex items-center gap-1 px-2.5 py-1.5 rounded text-xs font-bold" style={{ background: BLACK, color: WHITE }}><Download size={12} /> Excel</button>
                         <button onClick={() => printCalcPDF(c)} className="flex items-center gap-1 px-2.5 py-1.5 rounded text-xs font-bold" style={{ background: RED, color: WHITE }}><FileText size={12} /> PDF для клиента</button>
+                        <button onClick={() => startEditCalc(c)} className="flex items-center gap-1 px-2.5 py-1.5 rounded text-xs font-bold" style={{ background: GRAY, color: BLACK }}><Pencil size={12} /> Изменить</button>
                       </div>
                       <button onClick={() => deleteCalculation(c.id)} className="flex items-center gap-1 px-2.5 py-1.5 rounded text-xs font-bold" style={{ color: RED }}><Trash2 size={13} /> Удалить</button>
                     </div>
