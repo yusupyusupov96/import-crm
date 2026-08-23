@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import * as XLSX from "xlsx";
 import {
   Package, Users, Calculator, LayoutGrid, Plus, TrendingUp, Truck, X,
-  Download, ChevronRight, Lock, Pencil, Trash2, FileText, Check, LogOut, Loader2,
+  Download, ChevronRight, Lock, Pencil, Trash2, FileText, Check, LogOut, Loader2, Menu,
 } from "lucide-react";
 import { supabase } from "./supabaseClient";
 
@@ -301,7 +301,7 @@ function AuthScreen() {
   );
 }
 
-function Nav({ tab, setTab, clientsCount, userEmail, isPro }) {
+function Nav({ tab, setTab, clientsCount, userEmail, isPro, mobileOpen, setMobileOpen }) {
   const [showPrice, setShowPrice] = useState(false);
   const items = [
     { id: "dashboard", label: "Дашборд", icon: LayoutGrid },
@@ -312,22 +312,28 @@ function Nav({ tab, setTab, clientsCount, userEmail, isPro }) {
   ];
   const used = Math.min(clientsCount, FREE_LIMIT);
   const pct = (used / FREE_LIMIT) * 100;
-  return (
-    <div className="flex flex-col w-60 shrink-0" style={{ background: BLACK }}>
-      <div className="px-5 py-6">
-        <div style={{ ...display, color: WHITE, fontWeight: 800, fontSize: 20, letterSpacing: "0.02em" }}>
-          ИМПОРТ<span style={{ color: RED }}>·</span>CRM
+
+  const content = (
+    <div className="flex flex-col w-60 shrink-0 h-full" style={{ background: BLACK }}>
+      <div className="px-5 py-6 flex items-center justify-between">
+        <div>
+          <div style={{ ...display, color: WHITE, fontWeight: 800, fontSize: 20, letterSpacing: "0.02em" }}>
+            ИМПОРТ<span style={{ color: RED }}>·</span>CRM
+          </div>
+          <div style={{ color: NAV_MUTED, fontSize: 13, marginTop: 2, ...mono }}>ДЛЯ БАЙЕРОВ ИЗ КИТАЯ</div>
         </div>
-        <div style={{ color: NAV_MUTED, fontSize: 13, marginTop: 2, ...mono }}>ДЛЯ БАЙЕРОВ ИЗ КИТАЯ</div>
+        <button className="md:hidden p-1" onClick={() => setMobileOpen(false)} style={{ color: WHITE }}>
+          <X size={22} />
+        </button>
       </div>
-      <nav className="flex-1 px-2">
+      <nav className="flex-1 px-2 overflow-auto">
         {items.map((it) => {
           const Icon = it.icon;
           const active = tab === it.id;
           return (
             <button
               key={it.id}
-              onClick={() => setTab(it.id)}
+              onClick={() => { setTab(it.id); setMobileOpen(false); }}
               className="w-full flex items-center gap-3 px-3 py-2.5 mb-1 rounded transition-colors text-left"
               style={{ background: active ? RED : "transparent", color: active ? WHITE : "#D5D8DE" }}
             >
@@ -391,6 +397,30 @@ function Nav({ tab, setTab, clientsCount, userEmail, isPro }) {
       </div>
     </div>
   );
+
+  return (
+    <>
+      {/* Desktop: постоянно видимый сайдбар */}
+      <div className="hidden md:flex">{content}</div>
+
+      {/* Mobile: верхняя панель с гамбургером */}
+      <div className="md:hidden flex items-center justify-between px-4 py-3" style={{ background: BLACK }}>
+        <div style={{ ...display, color: WHITE, fontWeight: 800, fontSize: 17 }}>
+          ИМПОРТ<span style={{ color: RED }}>·</span>CRM
+        </div>
+        <button onClick={() => setMobileOpen(true)} style={{ color: WHITE }}>
+          <Menu size={24} />
+        </button>
+      </div>
+
+      {/* Mobile: выпадающая панель поверх контента */}
+      {mobileOpen && (
+        <div className="md:hidden fixed inset-0 z-50 flex" style={{ background: "rgba(0,0,0,0.5)" }} onClick={() => setMobileOpen(false)}>
+          <div onClick={(e) => e.stopPropagation()}>{content}</div>
+        </div>
+      )}
+    </>
+  );
 }
 
 function StatCard({ label, value, sub, accent }) {
@@ -422,7 +452,7 @@ function Dashboard({ clients, orders }) {
       <h1 style={{ ...display, fontSize: 25, fontWeight: 800, color: BLACK }}>Дашборд</h1>
       <p style={{ color: MUTED, fontSize: 15.5, marginTop: 2, fontWeight: 500 }}>Сводка по вашему импорт-бизнесу</p>
 
-      <div className="grid grid-cols-3 gap-3 mt-5">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-5">
         <StatCard label="ОБОРОТ" value={`${totalRevenue.toLocaleString("ru-RU")} ₽`} sub={`По ${orders.length} заказам`} accent="#1D8A4E" />
         <StatCard label="АКТИВНЫХ КЛИЕНТОВ" value={clients.length} sub={`${regularCount} постоянных`} />
         <StatCard label="ЗАКАЗОВ В ПУТИ" value={inTransit.length} sub={etaLabel} />
@@ -729,7 +759,7 @@ function ClientDetail({ client, orders, onClose, onSave, onDelete, onSaveOrderPa
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-3 mt-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-5">
           <div className="p-3 rounded" style={{ background: GRAY }}>
             <div style={{ fontSize: 12.5, color: MUTED, fontWeight: 700, ...mono }}>ЗАКАЗОВ</div>
             <div style={{ ...display, fontSize: 23, fontWeight: 800, color: BLACK, marginTop: 2 }}>{clientOrders.length}</div>
@@ -921,7 +951,7 @@ function Clients({ clients, orders, userId, onDataChanged, isPro }) {
 
   return (
     <div>
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h1 style={{ ...display, fontSize: 25, fontWeight: 800, color: BLACK }}>Клиенты</h1>
           <p style={{ color: MUTED, fontSize: 15.5, marginTop: 2, fontWeight: 500 }}>
@@ -929,10 +959,10 @@ function Clients({ clients, orders, userId, onDataChanged, isPro }) {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => exportToExcel(clients, orders, "клиенты_и_заказы.xlsx")} className="flex items-center gap-1.5 px-3 py-2 rounded text-sm font-bold" style={{ background: WHITE, color: BLACK, border: "1px solid #CCC" }}>
+          <button onClick={() => exportToExcel(clients, orders, "клиенты_и_заказы.xlsx")} className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-2 rounded text-sm font-bold" style={{ background: WHITE, color: BLACK, border: "1px solid #CCC" }}>
             <Download size={15} /> Excel
           </button>
-          <button onClick={() => setShowForm(true)} disabled={atLimit} className="flex items-center gap-1.5 px-3 py-2 rounded text-sm font-bold" style={{ background: atLimit ? "#DDD" : RED, color: WHITE, cursor: atLimit ? "not-allowed" : "pointer" }}>
+          <button onClick={() => setShowForm(true)} disabled={atLimit} className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-2 rounded text-sm font-bold" style={{ background: atLimit ? "#DDD" : RED, color: WHITE, cursor: atLimit ? "not-allowed" : "pointer" }}>
             <Plus size={15} /> Добавить
           </button>
         </div>
@@ -945,16 +975,18 @@ function Clients({ clients, orders, userId, onDataChanged, isPro }) {
       )}
 
       {showForm && (
-        <div className="mt-4 p-4 rounded flex items-center gap-2" style={{ background: WHITE, border: "1px solid #E0E0E0" }}>
+        <div className="mt-4 p-4 rounded flex flex-col md:flex-row items-stretch md:items-center gap-2" style={{ background: WHITE, border: "1px solid #E0E0E0" }}>
           <input autoFocus value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addClient()} placeholder="Имя клиента" className="flex-1 px-2.5 py-2 rounded text-sm outline-none" style={{ border: "1px solid #CCC" }} />
-          <input value={newClientCode} onChange={(e) => setNewClientCode(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addClient()} placeholder="Код (необязательно)" className="w-40 px-2.5 py-2 rounded text-sm outline-none" style={{ border: "1px solid #CCC", ...mono }} />
-          <button onClick={addClient} disabled={busy} className="px-3 py-2 rounded text-sm font-bold" style={{ background: BLACK, color: WHITE }}>Сохранить</button>
-          <button onClick={() => setShowForm(false)} className="p-2 rounded" style={{ color: MUTED }}><X size={16} /></button>
+          <input value={newClientCode} onChange={(e) => setNewClientCode(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addClient()} placeholder="Код (необязательно)" className="md:w-40 px-2.5 py-2 rounded text-sm outline-none" style={{ border: "1px solid #CCC", ...mono }} />
+          <div className="flex gap-2">
+            <button onClick={addClient} disabled={busy} className="flex-1 md:flex-none px-3 py-2 rounded text-sm font-bold" style={{ background: BLACK, color: WHITE }}>Сохранить</button>
+            <button onClick={() => setShowForm(false)} className="p-2 rounded" style={{ color: MUTED }}><X size={16} /></button>
+          </div>
         </div>
       )}
 
       <div className="mt-4 rounded overflow-hidden" style={{ border: "1px solid #E0E0E0" }}>
-        <div className="grid grid-cols-5 px-4 py-2.5" style={{ background: GRAY, fontSize: 13, fontWeight: 800, color: MUTED, ...mono }}>
+        <div className="hidden md:grid grid-cols-5 px-4 py-2.5" style={{ background: GRAY, fontSize: 13, fontWeight: 800, color: MUTED, ...mono }}>
           <div>КЛИЕНТ</div><div>ЗАКАЗОВ</div><div>СУММА</div><div>СТАТУС</div><div></div>
         </div>
         {clients.length === 0 && (
@@ -966,15 +998,21 @@ function Clients({ clients, orders, userId, onDataChanged, isPro }) {
           const co = orders.filter((o) => o.clientId === c.id);
           const coTotal = co.reduce((s, o) => s + o.price, 0);
           return (
-            <button key={c.id} onClick={() => setSelected(c)} className="w-full grid grid-cols-5 px-4 py-3 items-center text-left" style={{ background: WHITE, borderTop: "1px solid #EEE" }}>
-              <div>
-                <div style={{ fontWeight: 700, fontSize: 15.5, color: BLACK }}>{c.name}</div>
-                {c.code && <div style={{ fontSize: 12, color: MUTED, fontWeight: 600, ...mono }}>код: {c.code}</div>}
+            <button key={c.id} onClick={() => setSelected(c)} className="w-full flex flex-col gap-2 md:grid md:grid-cols-5 md:gap-0 px-4 py-3 items-start md:items-center text-left" style={{ background: WHITE, borderTop: "1px solid #EEE" }}>
+              <div className="flex items-center justify-between w-full md:block md:w-auto">
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: 15.5, color: BLACK }}>{c.name}</div>
+                  {c.code && <div style={{ fontSize: 12, color: MUTED, fontWeight: 600, ...mono }}>код: {c.code}</div>}
+                </div>
+                <ChevronRight size={17} color={MUTED_2} className="md:hidden" />
               </div>
-              <div style={{ fontSize: 15, fontWeight: 600, color: INK, ...mono }}>{co.length}</div>
-              <div style={{ fontSize: 15, fontWeight: 600, color: INK, ...mono }}>{coTotal.toLocaleString("ru-RU")} ₽</div>
+              <div className="flex items-center gap-3 md:contents">
+                <div style={{ fontSize: 14, fontWeight: 600, color: INK, ...mono }} className="md:hidden">Заказов: {co.length}</div>
+                <div style={{ fontSize: 15, fontWeight: 600, color: INK, ...mono }} className="hidden md:block">{co.length}</div>
+                <div style={{ fontSize: 15, fontWeight: 600, color: INK, ...mono }}>{coTotal.toLocaleString("ru-RU")} ₽</div>
+              </div>
               <div><span className="px-2 py-0.5 rounded text-xs font-bold" style={{ background: GRAY, color: BLACK }}>{c.tag}</span></div>
-              <div className="flex justify-end"><ChevronRight size={17} color={MUTED_2} /></div>
+              <div className="hidden md:flex justify-end"><ChevronRight size={17} color={MUTED_2} /></div>
             </button>
           );
         })}
@@ -999,12 +1037,12 @@ function Clients({ clients, orders, userId, onDataChanged, isPro }) {
 function Orders({ orders, clients }) {
   return (
     <div>
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h1 style={{ ...display, fontSize: 25, fontWeight: 800, color: BLACK }}>Заказы</h1>
           <p style={{ color: MUTED, fontSize: 15.5, marginTop: 2, fontWeight: 500 }}>{orders.length} активных позиций</p>
         </div>
-        <button onClick={() => exportToExcel(clients, orders, "клиенты_и_заказы.xlsx")} className="flex items-center gap-1.5 px-3 py-2 rounded text-sm font-bold" style={{ background: WHITE, color: BLACK, border: "1px solid #CCC" }}>
+        <button onClick={() => exportToExcel(clients, orders, "клиенты_и_заказы.xlsx")} className="flex items-center justify-center gap-1.5 px-3 py-2 rounded text-sm font-bold" style={{ background: WHITE, color: BLACK, border: "1px solid #CCC" }}>
           <Download size={15} /> Excel
         </button>
       </div>
@@ -1106,7 +1144,7 @@ function CostCalculator() {
       <h1 style={{ ...display, fontSize: 25, fontWeight: 800, color: BLACK }}>Калькулятор себестоимости</h1>
       <p style={{ color: MUTED, fontSize: 15.5, marginTop: 2, fontWeight: 500 }}>Закупка, доставка, курс — всё в одном месте</p>
 
-      <div className="grid grid-cols-2 gap-5 mt-5">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mt-5">
         <div className="p-4 rounded" style={{ background: WHITE, border: "1px solid #E0E0E0" }}>
           <Field label="Закупочная цена" value={price} setValue={setPrice} unit="юань" />
           <Field label="Доставка по Китаю" value={chinaDelivery} setValue={setChinaDelivery} unit="юань" />
@@ -1235,7 +1273,7 @@ function InvoiceBuilder({ invoices, setInvoices }) {
 
         <button onClick={addItem} className="flex items-center gap-1.5 mt-2 px-2.5 py-1.5 rounded text-sm font-bold" style={{ color: BLACK }}><Plus size={15} /> Добавить товар</button>
 
-        <div className="grid grid-cols-2 gap-4 mt-4 pt-4" style={{ borderTop: "1px solid #EEE" }}>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4 pt-4" style={{ borderTop: "1px solid #EEE" }}>
           <div>
             <CalcField label="Тариф логистики" value={logisticsRate} setValue={setLogisticsRate} unit="$ / кг" step={0.1} />
             <div className="-mt-2 mb-3.5 pl-1" style={{ fontSize: 12.5, color: MUTED, fontWeight: 600 }}>
@@ -1313,6 +1351,7 @@ export default function App() {
   const [invoices, setInvoices] = useState([]);
   const [loadingData, setLoadingData] = useState(false);
   const [loadError, setLoadError] = useState("");
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [isPro, setIsPro] = useState(false);
 
   useEffect(() => {
@@ -1359,9 +1398,9 @@ export default function App() {
   if (!session) return <AuthScreen />;
 
   return (
-    <div className="flex min-h-screen" style={{ background: GRAY, ...display }}>
-      <Nav tab={tab} setTab={setTab} clientsCount={clients.length} userEmail={session.user?.email} isPro={isPro} />
-      <div className="flex-1 p-7 overflow-auto">
+    <div className="flex flex-col md:flex-row min-h-screen" style={{ background: GRAY, ...display }}>
+      <Nav tab={tab} setTab={setTab} clientsCount={clients.length} userEmail={session.user?.email} isPro={isPro} mobileOpen={mobileNavOpen} setMobileOpen={setMobileNavOpen} />
+      <div className="flex-1 p-4 md:p-7 overflow-auto">
         {loadingData && (
           <div className="flex items-center gap-2 mb-4" style={{ color: MUTED, fontSize: 14, fontWeight: 600 }}>
             <Loader2 size={16} className="animate-spin" /> Загрузка данных из базы...
