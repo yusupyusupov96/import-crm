@@ -78,6 +78,10 @@ async function deleteInvoiceRemote(id) {
   const { error } = await supabase.from("invoices").delete().eq("id", id);
   if (error) throw error;
 }
+async function updateInvoiceRemote(id, patch) {
+  const { error } = await supabase.from("invoices").update(patch).eq("id", id);
+  if (error) throw error;
+}
 function dbInvoiceToUi(row) {
   return {
     id: row.id,
@@ -92,6 +96,40 @@ function dbInvoiceToUi(row) {
     totalVolume: row.total_volume,
     density: row.density,
     total: row.total,
+    date: row.created_at ? new Date(row.created_at).toLocaleDateString("ru-RU") : "",
+  };
+}
+
+async function fetchCalculationsRemote() {
+  const { data, error } = await supabase.from("calculations").select("*").order("created_at", { ascending: false });
+  if (error) throw error;
+  return data;
+}
+async function createCalculationRemote(payload) {
+  const { error } = await supabase.from("calculations").insert(payload);
+  if (error) throw error;
+}
+async function deleteCalculationRemote(id) {
+  const { error } = await supabase.from("calculations").delete().eq("id", id);
+  if (error) throw error;
+}
+function dbCalcToUi(row) {
+  return {
+    id: row.id,
+    number: row.number,
+    clientName: row.client_name || "",
+    price: row.price,
+    chinaDelivery: row.china_delivery,
+    rate: row.rate,
+    weight: row.weight,
+    shipRateUsd: row.ship_rate_usd,
+    usdRate: row.usd_rate,
+    buyerFee: row.buyer_fee,
+    other: row.other,
+    marginRub: row.margin_rub,
+    costTotal: row.cost_total,
+    sellPrice: row.sell_price,
+    profit: row.profit,
     date: row.created_at ? new Date(row.created_at).toLocaleDateString("ru-RU") : "",
   };
 }
@@ -174,6 +212,61 @@ function exportInvoiceToExcel(invoice) {
   XLSX.utils.book_append_sheet(wb, itemsSheet, "Товары");
   XLSX.utils.book_append_sheet(wb, summarySheet, "Итоги");
   XLSX.writeFile(wb, `Накладная_${invoice.number}.xlsx`);
+}
+
+function exportCalcToExcel(calc) {
+  const wb = XLSX.utils.book_new();
+  const sheet = XLSX.utils.json_to_sheet([
+    { Показатель: "Товар, ¥", Значение: calc.price },
+    { Показатель: "Доставка по Китаю, ¥", Значение: calc.chinaDelivery },
+    { Показатель: "Курс юаня, ₽", Значение: calc.rate },
+    { Показатель: "Вес партии, кг", Значение: calc.weight },
+    { Показатель: "Тариф доставки, $/кг", Значение: calc.shipRateUsd },
+    { Показатель: "Курс доллара, ₽", Значение: calc.usdRate },
+    { Показатель: "Себестоимость, ₽", Значение: calc.costTotal },
+    { Показатель: "Цена продажи, ₽", Значение: calc.sellPrice },
+  ]);
+  XLSX.utils.book_append_sheet(wb, sheet, "Расчёт");
+  XLSX.writeFile(wb, `Расчёт_${calc.number || calc.id}.xlsx`);
+}
+
+function printCalcPDF(calc) {
+  const win = window.open("", "_blank", "width=850,height=1000");
+  if (!win) return;
+  const html = `
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>Расчёт ${calc.number || ""}</title>
+        <style>
+          body { font-family: 'Manrope', Arial, sans-serif; color: #1A1A1A; padding: 40px; }
+          h1 { font-size: 22px; margin-bottom: 2px; }
+          .sub { color: #666; font-size: 13px; margin-bottom: 24px; }
+          .costs { margin-top: 16px; width: 360px; }
+          .costs div { display: flex; justify-content: space-between; padding: 7px 0; font-size: 14px; border-bottom: 1px solid #F0F0F0; }
+          .total { border-top: 2px solid #1A1A1A; margin-top: 8px; padding-top: 12px !important; font-weight: 800; font-size: 21px; color: #C8102E; border-bottom: none; }
+          .brand { font-weight: 800; font-size: 15px; letter-spacing: 0.02em; margin-bottom: 24px; }
+          .brand span { color: #C8102E; }
+          @media print { body { padding: 20px; } }
+        </style>
+      </head>
+      <body>
+        <div class="brand">ИМПОРТ<span>·</span>CRM</div>
+        <h1>Коммерческий расчёт ${calc.number || ""}</h1>
+        <div class="sub">Дата: ${calc.date}${calc.clientName ? ` · Клиент: ${calc.clientName}` : ""}</div>
+        <div class="costs">
+          <div><span>Товар</span><span>${Math.round(calc.price * calc.rate).toLocaleString("ru-RU")} ₽</span></div>
+          <div><span>Доставка по Китаю</span><span>${Math.round(calc.chinaDelivery * calc.rate).toLocaleString("ru-RU")} ₽</span></div>
+          <div><span>Международная доставка</span><span>${Math.round(calc.weight * calc.shipRateUsd * calc.usdRate).toLocaleString("ru-RU")} ₽</span></div>
+          <div><span>Прочие расходы</span><span>${Math.round(calc.other).toLocaleString("ru-RU")} ₽</span></div>
+          <div class="total"><span>Итого к оплате</span><span>${Math.round(calc.sellPrice).toLocaleString("ru-RU")} ₽</span></div>
+        </div>
+      </body>
+    </html>`;
+  win.document.write(html);
+  win.document.close();
+  win.focus();
+  setTimeout(() => win.print(), 300);
 }
 
 function printInvoicePDF(invoice) {
@@ -1147,7 +1240,7 @@ function loadCalcDraft() {
   }
 }
 
-function CostCalculator() {
+function CostCalculator({ calculations, userId, onDataChanged }) {
   const draft = loadCalcDraft();
   const [price, setPrice] = useState(draft.price ?? "");
   const [chinaDelivery, setChinaDelivery] = useState(draft.chinaDelivery ?? "");
@@ -1158,6 +1251,10 @@ function CostCalculator() {
   const [buyerFee, setBuyerFee] = useState(draft.buyerFee ?? "");
   const [other, setOther] = useState(draft.other ?? "");
   const [marginRub, setMarginRub] = useState(draft.marginRub ?? "");
+  const [clientName, setClientName] = useState("");
+  const [calcNumber, setCalcNumber] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [expanded, setExpanded] = useState(null);
 
   const n = (v) => (v === "" || v === null || v === undefined || isNaN(v) ? 0 : Number(v));
 
@@ -1175,6 +1272,46 @@ function CostCalculator() {
     const sellPrice = costTotal + profit;
     return { priceRub, chinaDeliveryRub, shipping, buyerFeeRub, costTotal, sellPrice, profit };
   }, [price, chinaDelivery, rate, weight, shipRateUsd, usdRate, buyerFee, other, marginRub]);
+
+  const saveCalculation = async () => {
+    if (saving) return;
+    setSaving(true);
+    try {
+      await createCalculationRemote({
+        user_id: userId,
+        number: calcNumber.trim() || `Р-${String(calculations.length + 1).padStart(4, "0")}`,
+        client_name: clientName.trim() || null,
+        price: n(price),
+        china_delivery: n(chinaDelivery),
+        rate: n(rate),
+        weight: n(weight),
+        ship_rate_usd: n(shipRateUsd),
+        usd_rate: n(usdRate),
+        buyer_fee: n(buyerFee),
+        other: n(other),
+        margin_rub: n(marginRub),
+        cost_total: calc.costTotal,
+        sell_price: calc.sellPrice,
+        profit: calc.profit,
+      });
+      await onDataChanged();
+      setClientName("");
+      setCalcNumber("");
+    } catch (e) {
+      alert("Не удалось сохранить расчёт: " + (e.message || "ошибка"));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const deleteCalculation = async (id) => {
+    try {
+      await deleteCalculationRemote(id);
+      await onDataChanged();
+    } catch (e) {
+      alert("Не удалось удалить расчёт: " + (e.message || "ошибка"));
+    }
+  };
 
   const Field = CalcField;
   const rows = [
@@ -1238,6 +1375,51 @@ function CostCalculator() {
           </div>
         </div>
       </div>
+
+      <div className="mt-5 p-4 rounded" style={{ background: WHITE, border: "1px solid #E0E0E0" }}>
+        <div style={{ fontWeight: 700, fontSize: 15, color: BLACK, marginBottom: 10 }}>Сохранить этот расчёт</div>
+        <div className="flex flex-col sm:flex-row gap-3">
+          <input value={clientName} onChange={(e) => setClientName(e.target.value)} placeholder="Имя клиента (необязательно)" className="flex-1 px-3 py-2.5 rounded text-sm outline-none" style={{ border: "1px solid #CCC", color: BLACK, fontWeight: 500 }} />
+          <input value={calcNumber} onChange={(e) => setCalcNumber(e.target.value)} placeholder="Номер (необязательно)" className="sm:w-48 px-3 py-2.5 rounded text-sm outline-none" style={{ border: "1px solid #CCC", color: BLACK, fontWeight: 500 }} />
+          <button onClick={saveCalculation} disabled={saving} className="px-5 py-2.5 rounded text-sm font-bold flex items-center justify-center gap-2" style={{ background: RED, color: WHITE, opacity: saving ? 0.7 : 1 }}>
+            {saving && <Loader2 size={14} className="animate-spin" />}
+            {saving ? "Сохраняем..." : "Сохранить расчёт"}
+          </button>
+        </div>
+      </div>
+
+      {calculations.length > 0 && (
+        <div className="mt-6">
+          <div style={{ fontWeight: 700, fontSize: 15.5, color: BLACK, marginBottom: 8 }}>Сохранённые расчёты</div>
+          <div className="space-y-2">
+            {calculations.map((c) => (
+              <div key={c.id} className="rounded overflow-hidden" style={{ background: WHITE, border: "1px solid #E0E0E0" }}>
+                <button onClick={() => setExpanded(expanded === c.id ? null : c.id)} className="w-full flex items-center justify-between p-3.5">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded flex items-center justify-center" style={{ background: GRAY }}><Calculator size={16} color={BLACK} /></div>
+                    <div className="text-left">
+                      <div style={{ fontWeight: 700, fontSize: 15, color: BLACK, ...mono }}>{c.number}</div>
+                      <div style={{ fontSize: 13, color: MUTED, fontWeight: 500 }}>{c.clientName ? `${c.clientName} · ` : ""}{c.date}</div>
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 16, fontWeight: 800, color: BLACK, ...mono }}>{Math.round(c.sellPrice).toLocaleString("ru-RU")} ₽</div>
+                </button>
+                {expanded === c.id && (
+                  <div className="px-3.5 pb-3.5" style={{ borderTop: "1px solid #EEE" }}>
+                    <div className="flex items-center justify-between mt-2 pt-2">
+                      <div className="flex items-center gap-2">
+                        <button onClick={() => exportCalcToExcel(c)} className="flex items-center gap-1 px-2.5 py-1.5 rounded text-xs font-bold" style={{ background: BLACK, color: WHITE }}><Download size={12} /> Excel</button>
+                        <button onClick={() => printCalcPDF(c)} className="flex items-center gap-1 px-2.5 py-1.5 rounded text-xs font-bold" style={{ background: RED, color: WHITE }}><FileText size={12} /> PDF для клиента</button>
+                      </div>
+                      <button onClick={() => deleteCalculation(c.id)} className="flex items-center gap-1 px-2.5 py-1.5 rounded text-xs font-bold" style={{ color: RED }}><Trash2 size={13} /> Удалить</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1252,6 +1434,7 @@ function InvoiceBuilder({ invoices, userId, onDataChanged }) {
   const [number, setNumber] = useState("");
   const [expanded, setExpanded] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [editingId, setEditingId] = useState(null);
 
   const n = (v) => (v === "" || v === null || v === undefined || isNaN(v) ? 0 : Number(v));
 
@@ -1272,8 +1455,7 @@ function InvoiceBuilder({ invoices, userId, onDataChanged }) {
     if (saving) return;
     setSaving(true);
     try {
-      await createInvoiceRemote({
-        user_id: userId,
+      const payload = {
         number: number.trim() || `Н-${String(invoices.length + 1).padStart(4, "0")}`,
         items: items.filter((it) => it.name.trim()),
         logistics_rate: n(logisticsRate),
@@ -1284,15 +1466,39 @@ function InvoiceBuilder({ invoices, userId, onDataChanged }) {
         total_volume: totals.volume,
         density: totals.density,
         total: totals.cost,
-      });
+      };
+      if (editingId) {
+        await updateInvoiceRemote(editingId, payload);
+      } else {
+        await createInvoiceRemote({ ...payload, user_id: userId });
+      }
       await onDataChanged();
       setItems([blankItem()]);
       setLogisticsRate(""); setPackaging(""); setInsurance(""); setOther(""); setNumber("");
+      setEditingId(null);
     } catch (e) {
       alert("Не удалось сохранить накладную: " + (e.message || "ошибка"));
     } finally {
       setSaving(false);
     }
+  };
+
+  const startEdit = (inv) => {
+    setEditingId(inv.id);
+    setNumber(inv.number || "");
+    setItems(inv.items && inv.items.length ? inv.items.map((it) => ({ id: Date.now() + Math.random(), name: it.name, weight: it.weight, volume: it.volume })) : [blankItem()]);
+    setLogisticsRate(inv.logisticsRate || "");
+    setPackaging(inv.packaging || "");
+    setInsurance(inv.insurance || "");
+    setOther(inv.other || "");
+    setExpanded(null);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setItems([blankItem()]);
+    setLogisticsRate(""); setPackaging(""); setInsurance(""); setOther(""); setNumber("");
   };
 
   const deleteInvoice = async (id) => {
@@ -1359,10 +1565,15 @@ function InvoiceBuilder({ invoices, userId, onDataChanged }) {
           </div>
         </div>
 
-        <button onClick={saveInvoice} disabled={saving} className="w-full mt-4 py-2.5 rounded text-sm font-bold flex items-center justify-center gap-2" style={{ background: RED, color: WHITE, opacity: saving ? 0.7 : 1 }}>
-        {saving && <Loader2 size={14} className="animate-spin" />}
-        {saving ? "Сохраняем..." : "Сохранить накладную"}
-      </button>
+        <div className="flex gap-2 mt-4">
+          <button onClick={saveInvoice} disabled={saving} className="flex-1 py-2.5 rounded text-sm font-bold flex items-center justify-center gap-2" style={{ background: RED, color: WHITE, opacity: saving ? 0.7 : 1 }}>
+            {saving && <Loader2 size={14} className="animate-spin" />}
+            {saving ? "Сохраняем..." : editingId ? "Сохранить изменения" : "Сохранить накладную"}
+          </button>
+          {editingId && (
+            <button onClick={cancelEdit} className="px-5 py-2.5 rounded text-sm font-bold" style={{ background: GRAY, color: BLACK }}>Отмена</button>
+          )}
+        </div>
       </div>
 
       {invoices.length > 0 && (
@@ -1392,6 +1603,7 @@ function InvoiceBuilder({ invoices, userId, onDataChanged }) {
                       <div className="flex items-center gap-2">
                         <button onClick={() => exportInvoiceToExcel(inv)} className="flex items-center gap-1 px-2.5 py-1.5 rounded text-xs font-bold" style={{ background: BLACK, color: WHITE }}><Download size={12} /> Excel</button>
                         <button onClick={() => printInvoicePDF(inv)} className="flex items-center gap-1 px-2.5 py-1.5 rounded text-xs font-bold" style={{ background: RED, color: WHITE }}><FileText size={12} /> PDF для клиента</button>
+                        <button onClick={() => startEdit(inv)} className="flex items-center gap-1 px-2.5 py-1.5 rounded text-xs font-bold" style={{ background: GRAY, color: BLACK }}><Pencil size={12} /> Изменить</button>
                       </div>
                       <button onClick={() => deleteInvoice(inv.id)} className="flex items-center gap-1 px-2.5 py-1.5 rounded text-xs font-bold" style={{ color: RED }}><Trash2 size={13} /> Удалить</button>
                     </div>
@@ -1412,6 +1624,7 @@ export default function App() {
   const [clients, setClients] = useState([]);
   const [orders, setOrders] = useState([]);
   const [invoices, setInvoices] = useState([]);
+  const [calculations, setCalculations] = useState([]);
   const [loadingData, setLoadingData] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -1432,12 +1645,15 @@ export default function App() {
       const rawClients = await fetchClientsRemote();
       const rawOrders = await fetchOrdersRemote();
       const rawInvoices = await fetchInvoicesRemote();
+      const rawCalculations = await fetchCalculationsRemote();
       const uiClients = rawClients.map((c) => ({ id: c.id, name: c.name, tag: c.tag, code: c.code }));
       const uiOrders = rawOrders.map((o) => dbOrderToUi(o, uiClients));
       const uiInvoices = rawInvoices.map(dbInvoiceToUi);
+      const uiCalculations = rawCalculations.map(dbCalcToUi);
       setClients(uiClients);
       setOrders(uiOrders);
       setInvoices(uiInvoices);
+      setCalculations(uiCalculations);
       if (session?.user?.id) {
         const sub = await fetchSubscriptionRemote(session.user.id);
         setIsPro(sub?.plan === "pro" && sub?.status === "active");
@@ -1478,7 +1694,7 @@ export default function App() {
         {tab === "dashboard" && <Dashboard clients={clients} orders={orders} />}
         {tab === "clients" && <Clients clients={clients} orders={orders} userId={session.user.id} onDataChanged={loadData} isPro={isPro} />}
         {tab === "orders" && <Orders orders={orders} clients={clients} />}
-        {tab === "calc" && <CostCalculator />}
+        {tab === "calc" && <CostCalculator calculations={calculations} userId={session.user.id} onDataChanged={loadData} />}
         {tab === "invoices" && <InvoiceBuilder invoices={invoices} userId={session.user.id} onDataChanged={loadData} />}
       </div>
     </div>
