@@ -65,6 +65,37 @@ async function updateOrderRemote(id, patch) {
   if (error) throw error;
 }
 
+async function fetchInvoicesRemote() {
+  const { data, error } = await supabase.from("invoices").select("*").order("created_at", { ascending: false });
+  if (error) throw error;
+  return data;
+}
+async function createInvoiceRemote(payload) {
+  const { error } = await supabase.from("invoices").insert(payload);
+  if (error) throw error;
+}
+async function deleteInvoiceRemote(id) {
+  const { error } = await supabase.from("invoices").delete().eq("id", id);
+  if (error) throw error;
+}
+function dbInvoiceToUi(row) {
+  return {
+    id: row.id,
+    number: row.number,
+    items: row.items || [],
+    logisticsRate: row.logistics_rate,
+    logisticsCost: (row.total_weight || 0) * (row.logistics_rate || 0),
+    packaging: row.packaging,
+    insurance: row.insurance,
+    other: row.other,
+    totalWeight: row.total_weight,
+    totalVolume: row.total_volume,
+    density: row.density,
+    total: row.total,
+    date: row.created_at ? new Date(row.created_at).toLocaleDateString("ru-RU") : "",
+  };
+}
+
 // ---- маппинг DB (snake_case) <-> UI (camelCase) ----
 function dbOrderToUi(row, clients) {
   const client = clients.find((c) => c.id === row.client_id);
@@ -1106,18 +1137,33 @@ function CalcField({ label, value, setValue, unit, step = 1 }) {
   );
 }
 
+const CALC_STORAGE_KEY = "importcrm_calc_draft_v1";
+function loadCalcDraft() {
+  try {
+    const raw = localStorage.getItem(CALC_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
 function CostCalculator() {
-  const [price, setPrice] = useState("");
-  const [chinaDelivery, setChinaDelivery] = useState("");
-  const [rate, setRate] = useState("");
-  const [weight, setWeight] = useState("");
-  const [shipRateUsd, setShipRateUsd] = useState("");
-  const [usdRate, setUsdRate] = useState("");
-  const [buyerFee, setBuyerFee] = useState("");
-  const [other, setOther] = useState("");
-  const [marginRub, setMarginRub] = useState("");
+  const draft = loadCalcDraft();
+  const [price, setPrice] = useState(draft.price ?? "");
+  const [chinaDelivery, setChinaDelivery] = useState(draft.chinaDelivery ?? "");
+  const [rate, setRate] = useState(draft.rate ?? "");
+  const [weight, setWeight] = useState(draft.weight ?? "");
+  const [shipRateUsd, setShipRateUsd] = useState(draft.shipRateUsd ?? "");
+  const [usdRate, setUsdRate] = useState(draft.usdRate ?? "");
+  const [buyerFee, setBuyerFee] = useState(draft.buyerFee ?? "");
+  const [other, setOther] = useState(draft.other ?? "");
+  const [marginRub, setMarginRub] = useState(draft.marginRub ?? "");
 
   const n = (v) => (v === "" || v === null || v === undefined || isNaN(v) ? 0 : Number(v));
+
+  useEffect(() => {
+    localStorage.setItem(CALC_STORAGE_KEY, JSON.stringify({ price, chinaDelivery, rate, weight, shipRateUsd, usdRate, buyerFee, other, marginRub }));
+  }, [price, chinaDelivery, rate, weight, shipRateUsd, usdRate, buyerFee, other, marginRub]);
 
   const calc = useMemo(() => {
     const priceRub = n(price) * n(rate);
@@ -1196,7 +1242,7 @@ function CostCalculator() {
   );
 }
 
-function InvoiceBuilder({ invoices, setInvoices }) {
+function InvoiceBuilder({ invoices, userId, onDataChanged }) {
   const blankItem = () => ({ id: Date.now() + Math.random(), name: "", weight: "", volume: "" });
   const [items, setItems] = useState([blankItem()]);
   const [logisticsRate, setLogisticsRate] = useState("");
@@ -1205,6 +1251,7 @@ function InvoiceBuilder({ invoices, setInvoices }) {
   const [other, setOther] = useState("");
   const [number, setNumber] = useState("");
   const [expanded, setExpanded] = useState(null);
+  const [saving, setSaving] = useState(false);
 
   const n = (v) => (v === "" || v === null || v === undefined || isNaN(v) ? 0 : Number(v));
 
@@ -1221,28 +1268,41 @@ function InvoiceBuilder({ invoices, setInvoices }) {
   const addItem = () => setItems([...items, blankItem()]);
   const removeItem = (id) => setItems(items.length > 1 ? items.filter((it) => it.id !== id) : items);
 
-  const saveInvoice = () => {
-    const invoice = {
-      id: Date.now(),
-      number: number.trim() || `Н-${String(invoices.length + 1).padStart(4, "0")}`,
-      items: items.filter((it) => it.name.trim()),
-      logisticsRate: n(logisticsRate),
-      logisticsCost: totals.logisticsCost,
-      packaging: n(packaging),
-      insurance: n(insurance),
-      other: n(other),
-      totalWeight: totals.weight,
-      totalVolume: totals.volume,
-      density: totals.density,
-      total: totals.cost,
-      date: new Date().toLocaleDateString("ru-RU"),
-    };
-    setInvoices([invoice, ...invoices]);
-    setItems([blankItem()]);
-    setLogisticsRate(""); setPackaging(""); setInsurance(""); setOther(""); setNumber("");
+  const saveInvoice = async () => {
+    if (saving) return;
+    setSaving(true);
+    try {
+      await createInvoiceRemote({
+        user_id: userId,
+        number: number.trim() || `Н-${String(invoices.length + 1).padStart(4, "0")}`,
+        items: items.filter((it) => it.name.trim()),
+        logistics_rate: n(logisticsRate),
+        packaging: n(packaging),
+        insurance: n(insurance),
+        other: n(other),
+        total_weight: totals.weight,
+        total_volume: totals.volume,
+        density: totals.density,
+        total: totals.cost,
+      });
+      await onDataChanged();
+      setItems([blankItem()]);
+      setLogisticsRate(""); setPackaging(""); setInsurance(""); setOther(""); setNumber("");
+    } catch (e) {
+      alert("Не удалось сохранить накладную: " + (e.message || "ошибка"));
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const deleteInvoice = (id) => setInvoices(invoices.filter((inv) => inv.id !== id));
+  const deleteInvoice = async (id) => {
+    try {
+      await deleteInvoiceRemote(id);
+      await onDataChanged();
+    } catch (e) {
+      alert("Не удалось удалить накладную: " + (e.message || "ошибка"));
+    }
+  };
 
   return (
     <div>
@@ -1299,7 +1359,10 @@ function InvoiceBuilder({ invoices, setInvoices }) {
           </div>
         </div>
 
-        <button onClick={saveInvoice} className="w-full mt-4 py-2.5 rounded text-sm font-bold" style={{ background: RED, color: WHITE }}>Сохранить накладную</button>
+        <button onClick={saveInvoice} disabled={saving} className="w-full mt-4 py-2.5 rounded text-sm font-bold flex items-center justify-center gap-2" style={{ background: RED, color: WHITE, opacity: saving ? 0.7 : 1 }}>
+        {saving && <Loader2 size={14} className="animate-spin" />}
+        {saving ? "Сохраняем..." : "Сохранить накладную"}
+      </button>
       </div>
 
       {invoices.length > 0 && (
@@ -1368,10 +1431,13 @@ export default function App() {
     try {
       const rawClients = await fetchClientsRemote();
       const rawOrders = await fetchOrdersRemote();
+      const rawInvoices = await fetchInvoicesRemote();
       const uiClients = rawClients.map((c) => ({ id: c.id, name: c.name, tag: c.tag, code: c.code }));
       const uiOrders = rawOrders.map((o) => dbOrderToUi(o, uiClients));
+      const uiInvoices = rawInvoices.map(dbInvoiceToUi);
       setClients(uiClients);
       setOrders(uiOrders);
+      setInvoices(uiInvoices);
       if (session?.user?.id) {
         const sub = await fetchSubscriptionRemote(session.user.id);
         setIsPro(sub?.plan === "pro" && sub?.status === "active");
@@ -1413,7 +1479,7 @@ export default function App() {
         {tab === "clients" && <Clients clients={clients} orders={orders} userId={session.user.id} onDataChanged={loadData} isPro={isPro} />}
         {tab === "orders" && <Orders orders={orders} clients={clients} />}
         {tab === "calc" && <CostCalculator />}
-        {tab === "invoices" && <InvoiceBuilder invoices={invoices} setInvoices={setInvoices} />}
+        {tab === "invoices" && <InvoiceBuilder invoices={invoices} userId={session.user.id} onDataChanged={loadData} />}
       </div>
     </div>
   );
