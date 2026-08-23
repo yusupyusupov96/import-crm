@@ -396,8 +396,8 @@ function PrivacyPolicy() {
           </Section>
 
           <Section title="9. Контакты">
-            По всем вопросам, связанным с обработкой данных, вы можете связаться с администрацией Сервиса через контакты,
-            указанные на сайте cncrm.ru.
+            По всем вопросам, связанным с обработкой данных, вы можете связаться со службой поддержки Сервиса в Telegram:{" "}
+            <a href="https://t.me/yusuf_tadiyalskiy" target="_blank" rel="noopener noreferrer" style={{ color: RED, fontWeight: 700 }}>@yusuf_tadiyalskiy</a>.
           </Section>
         </div>
 
