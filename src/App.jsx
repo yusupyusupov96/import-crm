@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import * as XLSX from "xlsx";
 import {
   Package, Users, Calculator, LayoutGrid, Plus, TrendingUp, Truck, X,
-  Download, ChevronRight, Lock, Pencil, Trash2, FileText, Check, LogOut, Loader2, Menu,
+  Download, ChevronRight, Lock, Pencil, Trash2, FileText, Check, LogOut, Loader2, Menu, MessageCircle,
 } from "lucide-react";
 import { supabase } from "./supabaseClient";
 
@@ -17,6 +17,19 @@ const NAV_MUTED = "#AEB4BF";
 
 const mono = { fontFamily: "'JetBrains Mono', 'Courier New', monospace" };
 const display = { fontFamily: "'Manrope', system-ui, sans-serif" };
+
+// Двухцветный заголовок: часть текста акцентным красным, часть — тёмным. По образцу лендингов конкурентов.
+function AccentHeading({ red, black, size = 30, align = "left", className = "" }) {
+  return (
+    <div
+      className={className}
+      style={{ ...display, fontWeight: 800, lineHeight: 1.18, fontSize: size, textAlign: align }}
+    >
+      <span style={{ color: RED }}>{red}</span>{" "}
+      <span style={{ color: BLACK }}>{black}</span>
+    </div>
+  );
+}
 
 const FREE_LIMIT = 5;
 
@@ -346,7 +359,7 @@ function PrivacyPolicy() {
         <a href="/" style={{ ...display, color: BLACK, fontWeight: 800, fontSize: 18, letterSpacing: "0.02em", textDecoration: "none" }}>
           ИМПОРТ<span style={{ color: RED }}>·</span>CRM
         </a>
-        <h1 style={{ ...display, fontSize: 26, fontWeight: 800, color: BLACK, marginTop: 18, marginBottom: 4 }}>Политика конфиденциальности</h1>
+        <AccentHeading red="Политика" black="конфиденциальности" size={26} className="mt-[18px] mb-1" />
         <p style={{ color: MUTED, fontSize: 13.5, marginBottom: 28, fontWeight: 600 }}>Действует с 24 августа 2026 года</p>
 
         <div className="p-6 rounded" style={{ background: WHITE, border: "1px solid #E0E0E0" }}>
@@ -439,7 +452,15 @@ function AuthScreen() {
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen" style={{ background: GRAY, ...display }}>
+    <div className="flex flex-col items-center justify-center min-h-screen px-4" style={{ background: GRAY, ...display }}>
+      <div className="w-full max-w-sm mb-6">
+        <AccentHeading
+          red="CRM для байеров"
+          black="из Китая — клиенты, заказы и расчёты в одном месте"
+          size={26}
+          align="center"
+        />
+      </div>
       <div className="w-full max-w-sm p-7 rounded-lg" style={{ background: WHITE, border: "1px solid #E0E0E0" }}>
         <div style={{ ...display, fontWeight: 800, fontSize: 22, color: BLACK }}>
           ИМПОРТ<span style={{ color: RED }}>·</span>CRM
@@ -598,6 +619,15 @@ function Nav({ tab, setTab, clientsCount, userEmail, isPro, mobileOpen, setMobil
             <LogOut size={15} />
           </button>
         </div>
+        <a
+          href="https://t.me/yusuf_tadiyalskiy"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="w-full mt-2.5 py-2 rounded flex items-center justify-center gap-1.5"
+          style={{ background: "#242424", color: "#D5D8DE", fontSize: 13, fontWeight: 700, textDecoration: "none" }}
+        >
+          <MessageCircle size={14} /> Поддержка
+        </a>
         <a href="/privacy" target="_blank" rel="noopener noreferrer" className="block text-center mt-2" style={{ color: "#6E7480", fontSize: 11, fontWeight: 600 }}>Политика конфиденциальности</a>
       </div>
     </div>
@@ -1434,7 +1464,7 @@ function CostCalculator({ calculations, userId, onDataChanged }) {
 
   return (
     <div>
-      <h1 style={{ ...display, fontSize: 25, fontWeight: 800, color: BLACK }}>Калькулятор себестоимости</h1>
+      <AccentHeading red="Калькулятор" black="себестоимости" size={25} />
       <p style={{ color: MUTED, fontSize: 15.5, marginTop: 2, fontWeight: 500 }}>Закупка, доставка, курс — всё в одном месте</p>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mt-5">
