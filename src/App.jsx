@@ -452,15 +452,16 @@ function AuthScreen() {
   };
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen px-4" style={{ background: GRAY, ...display }}>
-      <div className="w-full max-w-sm mb-6">
+    <div className="flex flex-col items-center justify-center min-h-screen px-4 py-10" style={{ background: GRAY, ...display }}>
+      <div className="w-full max-w-sm mb-4">
         <AccentHeading
-          red="CRM для байеров"
-          black="из Китая — клиенты, заказы и расчёты в одном месте"
+          red="Хватит считать"
+          black="в тетрадке и Excel — клиенты, заказы и расчёты в одном месте"
           size={26}
           align="center"
         />
       </div>
+      <div style={{ width: 2, height: 20, background: "#D8D8D8", marginBottom: 16 }} />
       <div className="w-full max-w-sm p-7 rounded-lg" style={{ background: WHITE, border: "1px solid #E0E0E0" }}>
         <div style={{ ...display, fontWeight: 800, fontSize: 22, color: BLACK }}>
           ИМПОРТ<span style={{ color: RED }}>·</span>CRM
@@ -519,8 +520,11 @@ function AuthScreen() {
             {mode === "signin" ? "Нет аккаунта? Зарегистрироваться" : "Уже есть аккаунт? Войти"}
           </button>
 
-          <a href="/privacy" className="block text-center text-xs font-semibold mt-1" style={{ color: NAV_MUTED }}>Политика конфиденциальности</a>
+          <a href="/privacy" className="block text-center text-xs font-semibold mt-1" style={{ color: MUTED }}>Политика конфиденциальности</a>
         </div>
+      </div>
+      <div style={{ color: MUTED, fontSize: 13, fontWeight: 600, marginTop: 24, textAlign: "center" }}>
+        Уже тестируют байеры из Китая — присоединяйся
       </div>
     </div>
   );
